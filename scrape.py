@@ -32,12 +32,11 @@ BASE_URL = "https://exclusivecarregistry.com"
 CAPTCHA_API = "https://2captcha.com"
 DEFAULT_DELAY = 1.5
 
-PLACEHOLDER_HASHES = set()
-
-# Known placeholder image paths on ECR (used to build hash blocklist on startup)
-KNOWN_PLACEHOLDERS = [
-    "/images/gallery/car/full/1034761",
-]
+# MD5 hashes of ECR placeholder images (premium only, specialist only, etc.)
+PLACEHOLDER_HASHES = {
+    "61b45e1a17a8686ef178943a642c2565",  # premium only
+    "11c0618a16b0454bccfaacac5cb4d6ff",  # specialist only
+}
 
 
 class ECRClient:
@@ -137,16 +136,6 @@ class ECRClient:
                 raise ValueError(f"2captcha error: {data}")
 
         raise TimeoutError("2captcha did not solve within 150 seconds")
-
-    def load_placeholder_hashes(self):
-        """Download known placeholder images and cache their MD5 hashes."""
-        global PLACEHOLDER_HASHES
-        for path in KNOWN_PLACEHOLDERS:
-            r = self.session.get(f"{BASE_URL}{path}")
-            if r.status_code == 200:
-                h = hashlib.md5(r.content).hexdigest()
-                PLACEHOLDER_HASHES.add(h)
-                print(f"[init] Cached placeholder hash: {h[:8]}...")
 
     def _get(self, url, **kwargs):
         time.sleep(self.delay)
@@ -289,9 +278,6 @@ def main():
         client.auth_login(args.username, args.password, args.captcha_key)
     else:
         parser.error("No auth provided — set ECR_SESSION or ECR_USERNAME/ECR_PASSWORD/ECR_CAPTCHA_KEY in .env")
-
-    # Load placeholder hashes
-    client.load_placeholder_hashes()
 
     # Determine models to scrape
     if args.model:
