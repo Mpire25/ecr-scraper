@@ -36,6 +36,12 @@ python scrape.py --make lamborghini --model aventador --max-per-car 15
 # Multiple models
 python scrape.py --make lamborghini --model aventador huracan gallardo --max-per-car 15
 
+# Target 600 images per model, distributed evenly across cars
+python scrape.py --make lamborghini --target-images 600 --max-per-car 20
+
+# Top up existing folders to 600 (skips models that already have enough)
+python scrape.py --make lamborghini --target-images 600 --max-per-car 20 --fill
+
 # Override output dir
 python scrape.py --make lamborghini --model aventador --out /mnt/carvis-data/data
 ```
