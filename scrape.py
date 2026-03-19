@@ -254,7 +254,11 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car):
             else:
                 placeholders += 1
 
-    print(f"[scrape] Done: {new_images} new, {skipped} already existed, {placeholders} placeholders skipped")
+    if new_images == 0 and skipped == 0:
+        class_dir.rmdir()
+        print(f"[scrape] No images — removed empty folder {class_dir}")
+    else:
+        print(f"[scrape] Done: {new_images} new, {skipped} already existed, {placeholders} placeholders skipped")
     return new_images
 
 
