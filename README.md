@@ -27,14 +27,14 @@ Set `ECR_USERNAME`, `ECR_PASSWORD`, and `ECR_CAPTCHA_KEY` in `.env`.
 ## Usage
 
 ```bash
-# Test run — 3 images from one model
+# Test run — 3 total images
 python scrape.py --make lamborghini --model aventador --max-images 3
 
-# Full scrape of one model
-python scrape.py --make lamborghini --model aventador
+# Full scrape, max 15 images per car
+python scrape.py --make lamborghini --model aventador --max-per-car 15
 
 # Multiple models
-python scrape.py --make lamborghini --model aventador huracan gallardo
+python scrape.py --make lamborghini --model aventador huracan gallardo --max-per-car 15
 
 # Override output dir
 python scrape.py --make lamborghini --model aventador --out /mnt/carvis-data/data
