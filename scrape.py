@@ -156,10 +156,10 @@ class ECRClient:
         return self.session.post(url, **kwargs)
 
     def get_models_for_make(self, make):
-        """Return list of model slugs for a make."""
+        """Return list of model names for a make (as expected by the /list endpoint)."""
         r = self._get(f"{BASE_URL}/make/{make}")
         soup = BeautifulSoup(r.text, "html.parser")
-        models = [el["data-info"] for el in soup.select(".car_item_line.model[data-info]")]
+        models = [next(el.stripped_strings).lower() for el in soup.select(".car_item_line.model[data-info]")]
         return models
 
     def get_cars_for_model(self, make, model):
