@@ -218,17 +218,24 @@ class ECRClient:
         return True
 
 
+def sanitize_name(name):
+    """Strip characters that are invalid or problematic in folder names and URLs."""
+    return name.replace("/", "-").replace("\\", "-").replace("'", "").strip()
+
+
 def scrape_model(client, make, model, out_dir, max_images, max_per_car):
-    class_dir = Path(out_dir) / f"{make}_{model}"
+    safe_model = sanitize_name(model)
+    clean_model = model.replace("'", "").strip()
+    class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
 
     new_images = 0
     skipped = 0
     placeholders = 0
 
-    print(f"\n[scrape] {make}/{model} -> {class_dir}")
+    print(f"\n[scrape] {make}/{clean_model} -> {class_dir}")
 
-    for car_make, car_model_slug, car_id in client.get_cars_for_model(make, model):
+    for car_make, car_model_slug, car_id in client.get_cars_for_model(make, clean_model):
         if max_images and new_images >= max_images:
             break
 
