@@ -30,7 +30,7 @@ load_dotenv()
 
 BASE_URL = "https://exclusivecarregistry.com"
 CAPTCHA_API = "https://2captcha.com"
-DEFAULT_DELAY = 2
+DEFAULT_DELAY = 0
 
 # MD5 hashes of ECR placeholder images — skip these when scraping
 PLACEHOLDER_HASHES = {
