@@ -220,12 +220,18 @@ class ECRClient:
 
 def sanitize_name(name):
     """Strip characters that are invalid or problematic in folder names and URLs."""
-    return name.replace("/", "-").replace("\\", "-").replace("'", "").strip()
+    return (name
+            .replace("/", "-")
+            .replace("\\", "-")
+            .replace("'", "")   # ASCII apostrophe
+            .replace("\u2018", "")  # left curly quote '
+            .replace("\u2019", "")  # right curly quote '
+            .strip())
 
 
 def scrape_model(client, make, model, out_dir, max_images, max_per_car):
     safe_model = sanitize_name(model)
-    clean_model = model.replace("'", "").strip()
+    clean_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
 
