@@ -110,39 +110,46 @@ class ECRClient:
         self._auth_args = ("login", username, password, captcha_key)
         print("[auth] Login successful")
 
-    def _solve_recaptcha(self, api_key, site_key, page_url):
-        """Submit reCAPTCHA to 2captcha and poll for solution."""
-        print("[captcha] Submitting to 2captcha...")
-        r = requests.post(f"{CAPTCHA_API}/in.php", data={
-            "key": api_key,
-            "method": "userrecaptcha",
-            "googlekey": site_key,
-            "pageurl": page_url,
-            "json": 1,
-        })
-        data = r.json()
-        if data.get("status") != 1:
-            raise ValueError(f"2captcha submission failed: {data}")
-
-        task_id = data["request"]
-        print(f"[captcha] Task submitted (id={task_id}), waiting for solution...")
-
-        for _ in range(30):
-            time.sleep(5)
-            r = requests.get(f"{CAPTCHA_API}/res.php", params={
+    def _solve_recaptcha(self, api_key, site_key, page_url, max_retries=3):
+        """Submit reCAPTCHA to 2captcha and poll for solution. Retries on ERROR_CAPTCHA_UNSOLVABLE."""
+        for attempt in range(1, max_retries + 1):
+            print(f"[captcha] Submitting to 2captcha (attempt {attempt}/{max_retries})...")
+            r = requests.post(f"{CAPTCHA_API}/in.php", data={
                 "key": api_key,
-                "action": "get",
-                "id": task_id,
+                "method": "userrecaptcha",
+                "googlekey": site_key,
+                "pageurl": page_url,
                 "json": 1,
             })
             data = r.json()
-            if data.get("status") == 1:
-                print("[captcha] Solved!")
-                return data["request"]
-            if data.get("request") != "CAPCHA_NOT_READY":
-                raise ValueError(f"2captcha error: {data}")
+            if data.get("status") != 1:
+                raise ValueError(f"2captcha submission failed: {data}")
 
-        raise TimeoutError("2captcha did not solve within 150 seconds")
+            task_id = data["request"]
+            print(f"[captcha] Task submitted (id={task_id}), waiting for solution...")
+
+            for _ in range(30):
+                time.sleep(5)
+                r = requests.get(f"{CAPTCHA_API}/res.php", params={
+                    "key": api_key,
+                    "action": "get",
+                    "id": task_id,
+                    "json": 1,
+                })
+                data = r.json()
+                if data.get("status") == 1:
+                    print("[captcha] Solved!")
+                    return data["request"]
+                if data.get("request") == "ERROR_CAPTCHA_UNSOLVABLE":
+                    print(f"[captcha] Unsolvable, retrying in 10s...")
+                    time.sleep(10)
+                    break
+                if data.get("request") != "CAPCHA_NOT_READY":
+                    raise ValueError(f"2captcha error: {data}")
+            else:
+                raise TimeoutError("2captcha did not solve within 150 seconds")
+
+        raise ValueError(f"2captcha failed after {max_retries} attempts (ERROR_CAPTCHA_UNSOLVABLE)")
 
     def _reauth(self):
         """Re-authenticate using stored credentials."""
