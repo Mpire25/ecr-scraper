@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Conda
+.conda/
+
+# Data / images
+data/
+*.jpg
+*.jpeg
+*.png
+*.webp
+
+# Credentials / secrets
+.env
+.env.local
+.env.*.local
+session.txt
+cookies.txt
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+/endpoints
