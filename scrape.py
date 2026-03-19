@@ -18,6 +18,7 @@ Usage:
 """
 
 import os
+import math
 import time
 import hashlib
 import argparse
@@ -229,7 +230,7 @@ def sanitize_name(name):
             .strip())
 
 
-def scrape_model(client, make, model, out_dir, max_images, max_per_car):
+def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_images=None):
     safe_model = sanitize_name(model)
     clean_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
@@ -241,19 +242,38 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car):
 
     print(f"\n[scrape] {make}/{clean_model} -> {class_dir}")
 
-    for car_make, car_model_slug, car_id in client.get_cars_for_model(make, clean_model):
-        if max_images and new_images >= max_images:
+    if target_images:
+        # Pre-count cars so we can distribute images evenly across examples
+        print(f"  [count] Counting cars for {make}/{clean_model}...")
+        all_cars = list(client.get_cars_for_model(make, clean_model))
+        car_count = len(all_cars)
+        if car_count == 0:
+            print(f"  [count] No cars found")
+            class_dir.rmdir()
+            return 0
+        computed_per_car = math.ceil(target_images / car_count)
+        effective_per_car = min(computed_per_car, max_per_car) if max_per_car else computed_per_car
+        print(f"  [count] {car_count} cars — targeting {effective_per_car} images/car to reach ~{target_images} total")
+        cars_iter = iter(all_cars)
+        total_cap = target_images
+    else:
+        effective_per_car = max_per_car
+        cars_iter = client.get_cars_for_model(make, clean_model)
+        total_cap = max_images
+
+    for car_make, car_model_slug, car_id in cars_iter:
+        if total_cap and new_images >= total_cap:
             break
 
         image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
         if not image_ids:
             continue
 
-        if max_per_car:
-            image_ids = image_ids[:max_per_car]
+        if effective_per_car:
+            image_ids = image_ids[:effective_per_car]
 
         for img_id in image_ids:
-            if max_images and new_images >= max_images:
+            if total_cap and new_images >= total_cap:
                 break
 
             dest = class_dir / f"{car_id}_{img_id}.jpg"
@@ -284,6 +304,7 @@ def main():
     parser.add_argument("--out", default=os.getenv("ECR_OUT", "./data"), help="Output directory for images")
     parser.add_argument("--max-images", type=int, default=None, help="Max total images to download per model (omit for no limit)")
     parser.add_argument("--max-per-car", type=int, default=None, help="Max images per individual car (omit for no limit)")
+    parser.add_argument("--target-images", type=int, default=None, help="Target total images per model, distributed evenly across cars (pre-counts cars, then sets per-car limit dynamically)")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help=f"Delay between requests in seconds (default: {DEFAULT_DELAY})")
 
     # Auth (all optional — fall back to .env)
@@ -317,7 +338,7 @@ def main():
     # Scrape
     total = 0
     for model in models:
-        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car)
+        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car, args.target_images)
 
     print(f"\n[done] Total new images downloaded: {total}")
 
