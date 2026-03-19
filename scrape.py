@@ -30,7 +30,7 @@ load_dotenv()
 
 BASE_URL = "https://exclusivecarregistry.com"
 CAPTCHA_API = "https://2captcha.com"
-DEFAULT_DELAY = 0
+DEFAULT_DELAY = 1.5
 
 # MD5 hashes of ECR placeholder images — skip these when scraping
 PLACEHOLDER_HASHES = {
@@ -57,6 +57,7 @@ class ECRClient:
         self._auth_args = None  # stored for re-login on session expiry
 
     def _set_cookies(self, phpsessid):
+        self.session.cookies.pop("PHPSESSID", None)
         self.session.cookies.set("PHPSESSID", phpsessid)
         self.session.cookies.set("cookies_performance", "1")
         self.session.cookies.set("cookies_ads", "1")
