@@ -37,3 +37,4 @@ cookies.txt
 # Misc
 /endpoints
 test.py
+find_rate_limit.py
