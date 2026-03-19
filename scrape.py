@@ -30,17 +30,15 @@ load_dotenv()
 
 BASE_URL = "https://exclusivecarregistry.com"
 CAPTCHA_API = "https://2captcha.com"
-DEFAULT_DELAY = 1.5
+DEFAULT_DELAY = 2
 
 # MD5 hashes of ECR placeholder images — skip these when scraping
 PLACEHOLDER_HASHES = {
     "61b45e1a17a8686ef178943a642c2565",  # premium only
     "11c0618a16b0454bccfaacac5cb4d6ff",  # specialist only
     "2c95ad680cf03f312683ab9b8fb7481e",  # image not available
+    "cb0eb6138919fa73bdee0a069f902666",  # log in (gated content, not session expiry)
 }
-
-# Session expired — triggers re-login
-LOGIN_PLACEHOLDER_HASH = "cb0eb6138919fa73bdee0a069f902666"
 
 
 class ECRClient:
@@ -54,7 +52,6 @@ class ECRClient:
             ),
         })
         self.delay = delay
-        self._auth_args = None  # stored for re-login on session expiry
 
     def _set_cookies(self, phpsessid):
         self.session.cookies.pop("PHPSESSID", None)
@@ -66,7 +63,6 @@ class ECRClient:
     def auth_session(self, phpsessid):
         """Authenticate with a manually provided PHPSESSID."""
         self._set_cookies(phpsessid)
-        self._auth_args = ("session", phpsessid)
         print(f"[auth] Using manual session: {phpsessid[:8]}...")
 
     def auth_login(self, username, password, captcha_key):
@@ -108,7 +104,6 @@ class ECRClient:
             raise ValueError("Login failed — no session cookie received. Check credentials.")
 
         self._set_cookies(self.session.cookies["PHPSESSID"])
-        self._auth_args = ("login", username, password, captcha_key)
         print("[auth] Login successful")
 
     def _solve_recaptcha(self, api_key, site_key, page_url, max_retries=3):
@@ -151,17 +146,6 @@ class ECRClient:
                 raise TimeoutError("2captcha did not solve within 150 seconds")
 
         raise ValueError(f"2captcha failed after {max_retries} attempts (ERROR_CAPTCHA_UNSOLVABLE)")
-
-    def _reauth(self):
-        """Re-authenticate using stored credentials."""
-        if self._auth_args is None:
-            raise ValueError("Session expired and no credentials stored for re-login")
-        if self._auth_args[0] == "session":
-            print("[auth] Session expired — re-applying manual session cookie")
-            self.auth_session(self._auth_args[1])
-        else:
-            print("[auth] Session expired — re-logging in...")
-            self.auth_login(self._auth_args[1], self._auth_args[2], self._auth_args[3])
 
     def _get(self, url, **kwargs):
         time.sleep(self.delay)
@@ -214,7 +198,7 @@ class ECRClient:
 
         soup2 = BeautifulSoup(r2.text, "html.parser")
         imgs = soup2.select(".nav_thumbs img[data-id]")
-        return [img["data-id"] for img in imgs]
+        return [img["data-id"] for img in imgs if img["data-id"] != "0"]
 
     def download_image(self, image_id, dest_path):
         """Download a full-size image. Returns True if saved, False if placeholder or failed."""
@@ -225,11 +209,6 @@ class ECRClient:
 
         data = b"".join(r.iter_content(8192))
         h = hashlib.md5(data).hexdigest()
-
-        if h == LOGIN_PLACEHOLDER_HASH:
-            print("[auth] Got login placeholder — session expired, re-authenticating...")
-            self._reauth()
-            return False
 
         if h in PLACEHOLDER_HASHES:
             return False
