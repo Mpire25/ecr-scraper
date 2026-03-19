@@ -21,8 +21,8 @@ ECR requires a login. Two options:
 2. Open DevTools → Application → Cookies → copy `PHPSESSID`
 3. Set `ECR_SESSION=<value>` in `.env`
 
-**Option 2 — Automated login via 2captcha**
-Set `ECR_USERNAME`, `ECR_PASSWORD`, and `ECR_CAPTCHA_KEY` in `.env`.
+**Option 2 — Automated login via 2captcha** *(currently broken)*
+Set `ECR_USERNAME`, `ECR_PASSWORD`, and `ECR_CAPTCHA_KEY` in `.env`. ECR's invisible reCAPTCHA tokens are rejected server-side by Google when solved via 2captcha — use Option 1 instead.
 
 ## Usage
 
