@@ -26,6 +26,7 @@ import requests
 from pathlib import Path
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 load_dotenv()
 
@@ -163,21 +164,29 @@ class ECRClient:
         models = [next(el.stripped_strings).lower() for el in soup.select(".car_item_line.model[data-info]")]
         return models
 
-    def get_cars_for_model(self, make, model):
-        """Yield (make, model_slug, car_id) for all cars of a make+model."""
+    def get_cars_for_model(self, make, model, show_progress=False):
+        """Return list of (make, model_slug, car_id) for all cars of a make+model."""
+        cars = []
         page = 1
-        while True:
-            print(f"  [list] {make}/{model} page {page}...")
-            r = self._get(f"{BASE_URL}/list", params={"model": f"{make},{model}", "page": page})
-            soup = BeautifulSoup(r.text, "html.parser")
-            links = soup.select("a.content[href*='/details/']")
-            if not links:
-                break
-            for link in links:
-                parts = link["href"].strip("/").split("/")
-                if len(parts) == 4:
-                    yield parts[1], parts[2], parts[3]
-            page += 1
+        with tqdm(desc=f"  [list] {make}/{model}", unit="pg", leave=False, disable=not show_progress) as pbar:
+            while True:
+                if not show_progress:
+                    print(f"  [list] {make}/{model} page {page}...", end="\r", flush=True)
+                r = self._get(f"{BASE_URL}/list", params={"model": f"{make},{model}", "page": page})
+                soup = BeautifulSoup(r.text, "html.parser")
+                links = soup.select("a.content[href*='/details/']")
+                if not links:
+                    break
+                for link in links:
+                    parts = link["href"].strip("/").split("/")
+                    if len(parts) == 4:
+                        cars.append((parts[1], parts[2], parts[3]))
+                page += 1
+                if show_progress:
+                    pbar.update(1)
+        if not show_progress:
+            print(f"  [list] {make}/{model} — {page - 1} pages, {len(cars)} cars found")
+        return cars
 
     def get_image_ids(self, make, model_slug, car_id):
         """Return all gallery image IDs for a specific car."""
@@ -250,8 +259,8 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
         effective_target = target_images - existing if fill else target_images
 
         # Pre-count cars so we can distribute images evenly across examples
-        print(f"  [count] Counting cars for {make}/{clean_model}...")
-        all_cars = list(client.get_cars_for_model(make, clean_model))
+        print(f"  [count] Listing cars for {make}/{clean_model}...")
+        all_cars = client.get_cars_for_model(make, clean_model)
         car_count = len(all_cars)
         if car_count == 0:
             print(f"  [count] No cars found")
@@ -259,39 +268,50 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
             return 0
         computed_per_car = math.ceil(effective_target / car_count)
         effective_per_car = min(computed_per_car, max_per_car) if max_per_car else computed_per_car
-        print(f"  [count] {car_count} cars — targeting {effective_per_car} images/car to reach ~{effective_target} new images")
-        cars_iter = iter(all_cars)
+        print(f"  [count] {car_count} cars — targeting {effective_per_car} img/car to reach ~{effective_target} new images")
+        cars_list = all_cars
         total_cap = effective_target
     else:
         effective_per_car = max_per_car
-        cars_iter = client.get_cars_for_model(make, clean_model)
+        print(f"  [count] Listing cars for {make}/{clean_model}...")
+        cars_list = client.get_cars_for_model(make, clean_model)
+        if not cars_list:
+            print(f"  [count] No cars found")
+            class_dir.rmdir()
+            return 0
         total_cap = max_images
 
-    for car_make, car_model_slug, car_id in cars_iter:
-        if total_cap and new_images >= total_cap:
-            break
-
-        image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
-        if not image_ids:
-            continue
-
-        if effective_per_car:
-            image_ids = image_ids[:effective_per_car]
-
-        for img_id in image_ids:
+    bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} cars [{elapsed}<{remaining}, {rate_fmt}]{postfix}"
+    with tqdm(cars_list, unit="car", bar_format=bar_format, dynamic_ncols=True) as pbar:
+        for car_make, car_model_slug, car_id in pbar:
             if total_cap and new_images >= total_cap:
                 break
 
-            dest = class_dir / f"{car_id}_{img_id}.jpg"
-            if dest.exists():
-                skipped += 1
+            pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
+
+            image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
+            if not image_ids:
                 continue
 
-            ok = client.download_image(img_id, dest)
-            if ok:
-                new_images += 1
-            else:
-                placeholders += 1
+            if effective_per_car:
+                image_ids = image_ids[:effective_per_car]
+
+            for img_id in image_ids:
+                if total_cap and new_images >= total_cap:
+                    break
+
+                dest = class_dir / f"{car_id}_{img_id}.jpg"
+                if dest.exists():
+                    skipped += 1
+                    continue
+
+                ok = client.download_image(img_id, dest)
+                if ok:
+                    new_images += 1
+                else:
+                    placeholders += 1
+
+            pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
 
     if new_images == 0 and skipped == 0:
         class_dir.rmdir()
