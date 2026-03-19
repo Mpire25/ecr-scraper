@@ -60,5 +60,5 @@ Output is organised as `<out>/<make>_<model>/<car_id>_<image_id>.jpg`.
 ## Notes
 
 - ECR serves placeholder images for gated content instead of 403s. The scraper detects and discards these by MD5 hash.
-- Session cookies expire — grab a fresh `PHPSESSID` if you start getting empty results.
+- Some images are gated behind higher account tiers and served as placeholders — these are detected and discarded the same way.
 - Default delay between requests is 0s (network latency alone is sufficient). Use `--delay` if you get rate limited.
