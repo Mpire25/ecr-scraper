@@ -66,25 +66,23 @@ class ECRClient:
 
     def auth_login(self, username, password, captcha_key):
         """Authenticate by logging in, solving reCAPTCHA via 2captcha."""
-        print("[auth] Fetching login page...")
-        r = self.session.get(f"{BASE_URL}/info")
+        print("[auth] Fetching login form...")
+        r = self.session.post(
+            f"{BASE_URL}/info",
+            data={"open_login_form": "1"},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Extract CSRF token
-        token_input = soup.find("input", {"name": "token"})
-        if not token_input:
-            raise ValueError("Could not find CSRF token on login page")
-        csrf_token = token_input["value"]
-
-        # Extract reCAPTCHA site key
-        recaptcha_el = soup.find(attrs={"data-sitekey": True})
-        if not recaptcha_el:
-            raise ValueError("Could not find reCAPTCHA site key on login page")
-        site_key = recaptcha_el["data-sitekey"]
+        # Extract reCAPTCHA site key from the formlogin hidden input
+        site_key_input = soup.find("input", {"name": "formlogin"})
+        if not site_key_input:
+            raise ValueError("Could not find reCAPTCHA site key in login form")
+        site_key = site_key_input["value"]
 
         print(f"[auth] reCAPTCHA site key: {site_key}")
 
-        # Solve reCAPTCHA
+        # Solve reCAPTCHA — response goes in the `token` field
         recaptcha_token = self._solve_recaptcha(captcha_key, site_key, f"{BASE_URL}/info")
 
         # Submit login
@@ -92,10 +90,10 @@ class ECRClient:
         r = self.session.post(
             f"{BASE_URL}/info",
             data={
-                "formlogin": recaptcha_token,
+                "formlogin": site_key,
                 "fusername": username,
                 "fpass": password,
-                "token": csrf_token,
+                "token": recaptcha_token,
                 "action": "login",
             },
             headers={"X-Requested-With": "XMLHttpRequest"},
