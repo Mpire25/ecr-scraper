@@ -31,7 +31,6 @@ load_dotenv()
 BASE_URL = "https://exclusivecarregistry.com"
 CAPTCHA_API = "https://2captcha.com"
 DEFAULT_DELAY = 1.5
-DEFAULT_MAX_IMAGES = 15
 
 PLACEHOLDER_HASHES = set()
 
@@ -220,7 +219,7 @@ class ECRClient:
         return True
 
 
-def scrape_model(client, make, model, out_dir, max_images):
+def scrape_model(client, make, model, out_dir, max_images, max_per_car):
     class_dir = Path(out_dir) / f"{make}_{model}"
     class_dir.mkdir(parents=True, exist_ok=True)
 
@@ -231,11 +230,20 @@ def scrape_model(client, make, model, out_dir, max_images):
     print(f"\n[scrape] {make}/{model} -> {class_dir}")
 
     for car_make, car_model_slug, car_id in client.get_cars_for_model(make, model):
+        if max_images and new_images >= max_images:
+            break
+
         image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
         if not image_ids:
             continue
 
-        for img_id in image_ids[:max_images]:
+        if max_per_car:
+            image_ids = image_ids[:max_per_car]
+
+        for img_id in image_ids:
+            if max_images and new_images >= max_images:
+                break
+
             dest = class_dir / f"{car_id}_{img_id}.jpg"
             if dest.exists():
                 skipped += 1
@@ -258,7 +266,8 @@ def main():
     parser.add_argument("--make", required=True, help="Make slug (e.g. lamborghini)")
     parser.add_argument("--model", nargs="+", help="Model slug(s) (e.g. aventador huracan). Omit to scrape all models.")
     parser.add_argument("--out", default=os.getenv("ECR_OUT", "./data"), help="Output directory for images")
-    parser.add_argument("--max-images", type=int, default=DEFAULT_MAX_IMAGES, help=f"Max images per car (default: {DEFAULT_MAX_IMAGES})")
+    parser.add_argument("--max-images", type=int, default=None, help="Max total images to download per model (omit for no limit)")
+    parser.add_argument("--max-per-car", type=int, default=None, help="Max images per individual car (omit for no limit)")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help=f"Delay between requests in seconds (default: {DEFAULT_DELAY})")
 
     # Auth (all optional — fall back to .env)
@@ -295,7 +304,7 @@ def main():
     # Scrape
     total = 0
     for model in models:
-        total += scrape_model(client, args.make, model, args.out, args.max_images)
+        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car)
 
     print(f"\n[done] Total new images downloaded: {total}")
 
