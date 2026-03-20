@@ -42,6 +42,9 @@ python scrape.py --make lamborghini --target-images 600 --max-per-car 20
 # Top up existing folders to 600 (skips models that already have enough)
 python scrape.py --make lamborghini --target-images 600 --max-per-car 20 --fill
 
+# Download 5 cars in parallel
+python scrape.py --make lamborghini --model aventador --workers 5
+
 # Override output dir
 python scrape.py --make lamborghini --model aventador --out /mnt/carvis-data/data
 ```
@@ -68,3 +71,4 @@ Output is organised as `<out>/<make>_<model>/<car_id>_<image_id>.jpg`.
 - ECR serves placeholder images for gated content instead of 403s. The scraper detects and discards these by MD5 hash.
 - Some images are gated behind higher account tiers and served as placeholders — these are detected and discarded the same way.
 - Default delay between requests is 0s (network latency alone is sufficient). Use `--delay` if you get rate limited.
+- Use `--workers` to download from multiple individual car listings in parallel. Keeps N listings in-flight simultaneously — useful when scraping models with few images per listing.

@@ -22,6 +22,7 @@ import math
 import time
 import hashlib
 import argparse
+import concurrent.futures
 import requests
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -239,7 +240,7 @@ def sanitize_name(name):
             .strip())
 
 
-def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_images=None, fill=False):
+def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1):
     safe_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
@@ -280,44 +281,65 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
             return 0
         total_cap = max_images
 
-    bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} cars [{elapsed}<{remaining}, {rate_fmt}]{postfix}"
-    with tqdm(cars_list, unit="car", bar_format=bar_format, dynamic_ncols=True) as pbar:
-        for i, (car_make, car_model_slug, car_id) in enumerate(pbar):
-            if total_cap and new_images >= total_cap:
-                break
-
-            # Recompute per-car limit each iteration so sparse cars don't leave us short
-            if target_images:
-                remaining_images = total_cap - new_images
-                remaining_cars = len(cars_list) - i
-                computed_per_car = math.ceil(remaining_images / remaining_cars)
-                effective_per_car = min(computed_per_car, max_per_car) if max_per_car else computed_per_car
-
-            pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
-
-            image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
-            if not image_ids:
+    def _process_car(car_make, car_model_slug, car_id, per_car):
+        """Fetch image IDs and download images for one car. Returns (new, skipped, placeholders)."""
+        image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
+        if not image_ids:
+            return 0, 0, 0
+        if per_car:
+            image_ids = image_ids[:per_car]
+        n = s = p = 0
+        for img_id in image_ids:
+            dest = class_dir / f"{car_id}_{img_id}.jpg"
+            if dest.exists():
+                s += 1
                 continue
+            ok = client.download_image(img_id, dest)
+            if ok:
+                n += 1
+            else:
+                p += 1
+        return n, s, p
 
-            if effective_per_car:
-                image_ids = image_ids[:effective_per_car]
+    def _per_car_limit(i):
+        """Compute per-car image limit, rebalancing for remaining cars if using --target-images."""
+        if target_images:
+            remaining_images = total_cap - new_images
+            remaining_cars = len(cars_list) - i
+            per_car = math.ceil(remaining_images / remaining_cars)
+            return min(per_car, max_per_car) if max_per_car else per_car
+        return effective_per_car
 
-            for img_id in image_ids:
-                if total_cap and new_images >= total_cap:
-                    break
+    car_iter = iter(enumerate(cars_list))
+    pending = {}  # future -> car index
 
-                dest = class_dir / f"{car_id}_{img_id}.jpg"
-                if dest.exists():
-                    skipped += 1
-                    continue
+    def _submit_next():
+        if total_cap and new_images >= total_cap:
+            return
+        try:
+            i, (car_make, car_model_slug, car_id) = next(car_iter)
+        except StopIteration:
+            return
+        f = executor.submit(_process_car, car_make, car_model_slug, car_id, _per_car_limit(i))
+        pending[f] = i
 
-                ok = client.download_image(img_id, dest)
-                if ok:
-                    new_images += 1
-                else:
-                    placeholders += 1
+    bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} cars [{elapsed}<{remaining}, {rate_fmt}]{postfix}"
+    with tqdm(total=len(cars_list), unit="car", bar_format=bar_format, dynamic_ncols=True) as pbar:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            for _ in range(workers):
+                _submit_next()
 
-            pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
+            while pending:
+                done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+                for future in done:
+                    del pending[future]
+                    n, s, p = future.result()
+                    new_images += n
+                    skipped += s
+                    placeholders += p
+                    pbar.update(1)
+                    pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
+                    _submit_next()
 
     if new_images == 0 and skipped == 0:
         class_dir.rmdir()
@@ -338,6 +360,7 @@ def main():
     parser.add_argument("--max-per-car", type=int, default=None, help="Max images per individual car (omit for no limit)")
     parser.add_argument("--target-images", type=int, default=None, help="Target total images per model, distributed evenly across cars (pre-counts cars, then sets per-car limit dynamically)")
     parser.add_argument("--fill", action="store_true", help="With --target-images, count existing images and only download enough to reach the target. Skips folders that already meet the target.")
+    parser.add_argument("--workers", type=int, default=1, help="Number of cars to download in parallel (default: 1)")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help=f"Delay between requests in seconds (default: {DEFAULT_DELAY})")
 
     # Auth (all optional — fall back to .env)
@@ -371,7 +394,7 @@ def main():
     # Scrape
     total = 0
     for model in models:
-        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill)
+        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill, args.workers)
 
     print(f"\n[done] Total new images downloaded: {total}")
 
