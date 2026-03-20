@@ -158,12 +158,33 @@ class ECRClient:
         time.sleep(self.delay)
         return self.session.post(url, **kwargs)
 
+    def _extract_list_slug(self, soup, fallback):
+        """Extract the make slug as used in /list?model= from the meta keywords on the make page.
+
+        The first keyword is always the make name in its natural form (spaces/hyphens preserved),
+        which matches what the /list endpoint expects.
+        """
+        meta = soup.find("meta", {"name": "keywords"})
+        if meta:
+            return meta["content"].split(",")[0].strip()
+        return fallback
+
+    def get_list_slug(self, make):
+        """Return the make slug as expected by /list?model= (may differ from the URL path slug)."""
+        r = self._get(f"{BASE_URL}/make/{make}")
+        soup = BeautifulSoup(r.text, "html.parser")
+        return self._extract_list_slug(soup, make)
+
     def get_models_for_make(self, make):
-        """Return list of model names for a make (as expected by the /list endpoint)."""
+        """Return (list_slug, model_names) for a make.
+
+        list_slug is the make string as expected by /list?model= — it can differ from the
+        URL path slug (e.g. 'aston martin' vs 'aston-martin').
+        """
         r = self._get(f"{BASE_URL}/make/{make}")
         soup = BeautifulSoup(r.text, "html.parser")
         models = [next(el.stripped_strings).lower() for el in soup.select(".car_item_line.model[data-info]")]
-        return models
+        return self._extract_list_slug(soup, make), models
 
     def get_cars_for_model(self, make, model, show_progress=False):
         """Return list of (make, model_slug, car_id) for all cars of a make+model."""
@@ -240,7 +261,7 @@ def sanitize_name(name):
             .strip())
 
 
-def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1):
+def scrape_model(client, make, list_slug, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1):
     safe_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
@@ -260,7 +281,7 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
 
         # Pre-count cars so we can distribute images evenly across examples
         print(f"  [count] Listing cars for {make}/{model}...")
-        all_cars = client.get_cars_for_model(make, model)
+        all_cars = client.get_cars_for_model(list_slug, model)
         car_count = len(all_cars)
         if car_count == 0:
             print(f"  [count] No cars found")
@@ -274,7 +295,7 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
     else:
         effective_per_car = max_per_car
         print(f"  [count] Listing cars for {make}/{model}...")
-        cars_list = client.get_cars_for_model(make, model)
+        cars_list = client.get_cars_for_model(list_slug, model)
         if not cars_list:
             print(f"  [count] No cars found")
             class_dir.rmdir()
@@ -383,18 +404,21 @@ def main():
     else:
         parser.error("No auth provided — set ECR_SESSION or ECR_USERNAME/ECR_PASSWORD/ECR_CAPTCHA_KEY in .env")
 
-    # Determine models to scrape
+    # Determine models to scrape and resolve the /list query slug for this make
     if args.model:
         models = args.model
+        print(f"[make] Resolving list slug for {args.make}...")
+        list_slug = client.get_list_slug(args.make)
     else:
         print(f"[make] Fetching model list for {args.make}...")
-        models = client.get_models_for_make(args.make)
+        list_slug, models = client.get_models_for_make(args.make)
         print(f"[make] Found {len(models)} models: {models}")
+    print(f"[make] List query slug: '{list_slug}'")
 
     # Scrape
     total = 0
     for model in models:
-        total += scrape_model(client, args.make, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill, args.workers)
+        total += scrape_model(client, args.make, list_slug, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill, args.workers)
 
     print(f"\n[done] Total new images downloaded: {total}")
 
