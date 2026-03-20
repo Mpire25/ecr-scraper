@@ -150,13 +150,25 @@ class ECRClient:
 
         raise ValueError(f"2captcha failed after {max_retries} attempts (ERROR_CAPTCHA_UNSOLVABLE)")
 
-    def _get(self, url, **kwargs):
-        time.sleep(self.delay)
-        return self.session.get(url, **kwargs)
+    def _get(self, url, retries=4, **kwargs):
+        for attempt in range(retries):
+            try:
+                time.sleep(self.delay)
+                return self.session.get(url, **kwargs)
+            except requests.exceptions.ConnectionError:
+                if attempt == retries - 1:
+                    raise
+                time.sleep(2 ** attempt)
 
-    def _post(self, url, **kwargs):
-        time.sleep(self.delay)
-        return self.session.post(url, **kwargs)
+    def _post(self, url, retries=4, **kwargs):
+        for attempt in range(retries):
+            try:
+                time.sleep(self.delay)
+                return self.session.post(url, **kwargs)
+            except requests.exceptions.ConnectionError:
+                if attempt == retries - 1:
+                    raise
+                time.sleep(2 ** attempt)
 
     def _extract_list_slug(self, soup, fallback):
         """Extract the make slug as used in /list?model= from the meta keywords on the make page.
