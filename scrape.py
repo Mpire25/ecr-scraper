@@ -282,9 +282,16 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
 
     bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} cars [{elapsed}<{remaining}, {rate_fmt}]{postfix}"
     with tqdm(cars_list, unit="car", bar_format=bar_format, dynamic_ncols=True) as pbar:
-        for car_make, car_model_slug, car_id in pbar:
+        for i, (car_make, car_model_slug, car_id) in enumerate(pbar):
             if total_cap and new_images >= total_cap:
                 break
+
+            # Recompute per-car limit each iteration so sparse cars don't leave us short
+            if target_images:
+                remaining_images = total_cap - new_images
+                remaining_cars = len(cars_list) - i
+                computed_per_car = math.ceil(remaining_images / remaining_cars)
+                effective_per_car = min(computed_per_car, max_per_car) if max_per_car else computed_per_car
 
             pbar.set_postfix(new=new_images, skip=skipped, ph=placeholders)
 
