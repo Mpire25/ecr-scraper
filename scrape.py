@@ -241,7 +241,6 @@ def sanitize_name(name):
 
 def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_images=None, fill=False):
     safe_model = sanitize_name(model)
-    clean_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
 
@@ -250,7 +249,7 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
     placeholders = 0
 
     existing = len(list(class_dir.glob("*.jpg")))
-    print(f"\n[scrape] {make}/{clean_model} -> {class_dir} ({existing} existing)")
+    print(f"\n[scrape] {make}/{model} -> {class_dir} ({existing} existing)")
 
     if target_images:
         if fill and existing >= target_images:
@@ -259,8 +258,8 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
         effective_target = target_images - existing if fill else target_images
 
         # Pre-count cars so we can distribute images evenly across examples
-        print(f"  [count] Listing cars for {make}/{clean_model}...")
-        all_cars = client.get_cars_for_model(make, clean_model)
+        print(f"  [count] Listing cars for {make}/{model}...")
+        all_cars = client.get_cars_for_model(make, model)
         car_count = len(all_cars)
         if car_count == 0:
             print(f"  [count] No cars found")
@@ -273,8 +272,8 @@ def scrape_model(client, make, model, out_dir, max_images, max_per_car, target_i
         total_cap = effective_target
     else:
         effective_per_car = max_per_car
-        print(f"  [count] Listing cars for {make}/{clean_model}...")
-        cars_list = client.get_cars_for_model(make, clean_model)
+        print(f"  [count] Listing cars for {make}/{model}...")
+        cars_list = client.get_cars_for_model(make, model)
         if not cars_list:
             print(f"  [count] No cars found")
             class_dir.rmdir()
