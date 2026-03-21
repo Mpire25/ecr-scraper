@@ -20,6 +20,7 @@ Usage:
 import os
 import math
 import time
+import random
 import hashlib
 import argparse
 import concurrent.futures
@@ -273,7 +274,7 @@ def sanitize_name(name):
             .strip())
 
 
-def scrape_model(client, make, list_slug, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1):
+def scrape_model(client, make, list_slug, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1, random_from_first_n=None):
     safe_model = sanitize_name(model)
     class_dir = Path(out_dir) / f"{make}_{safe_model}"
     class_dir.mkdir(parents=True, exist_ok=True)
@@ -319,7 +320,13 @@ def scrape_model(client, make, list_slug, model, out_dir, max_images, max_per_ca
         image_ids = client.get_image_ids(car_make, car_model_slug, car_id)
         if not image_ids:
             return 0, 0, 0
-        if per_car:
+        if random_from_first_n is not None:
+            selected = [image_ids[0]]
+            pool = image_ids[1:random_from_first_n]
+            if pool:
+                selected.append(random.choice(pool))
+            image_ids = selected
+        elif per_car:
             image_ids = image_ids[:per_car]
         n = s = p = 0
         for img_id in image_ids:
@@ -395,6 +402,7 @@ def main():
     parser.add_argument("--fill", action="store_true", help="With --target-images, count existing images and only download enough to reach the target. Skips folders that already meet the target.")
     parser.add_argument("--workers", type=int, default=1, help="Number of cars to download in parallel (default: 1)")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help=f"Delay between requests in seconds (default: {DEFAULT_DELAY})")
+    parser.add_argument("--random-from-first-n", type=int, default=None, metavar="N", help="Per car: always take image 0, then pick 1 random image from indices 1..N-1 (or all available if fewer). Overrides --max-per-car.")
 
     # Auth (all optional — fall back to .env)
     parser.add_argument("--session", default=os.getenv("ECR_SESSION"), help="Manual PHPSESSID (or set ECR_SESSION in .env)")
@@ -430,7 +438,7 @@ def main():
     # Scrape
     total = 0
     for model in models:
-        total += scrape_model(client, args.make, list_slug, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill, args.workers)
+        total += scrape_model(client, args.make, list_slug, model, args.out, args.max_images, args.max_per_car, args.target_images, args.fill, args.workers, args.random_from_first_n)
 
     print(f"\n[done] Total new images downloaded: {total}")
 

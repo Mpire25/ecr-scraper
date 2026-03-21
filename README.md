@@ -42,6 +42,9 @@ python scrape.py --make lamborghini --target-images 600 --max-per-car 20
 # Top up existing folders to 600 (skips models that already have enough)
 python scrape.py --make lamborghini --target-images 600 --max-per-car 20 --fill
 
+# Per car: always take image 0, then pick 1 random image from indices 1..4
+python scrape.py --make lamborghini --model aventador --random-from-first-n 5
+
 # Download 5 cars in parallel
 python scrape.py --make lamborghini --model aventador --workers 5
 
