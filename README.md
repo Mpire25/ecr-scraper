@@ -54,21 +54,6 @@ python scrape.py --make lamborghini --model aventador --out /mnt/carvis-data/dat
 
 Output is organised as `<out>/<make>_<model>/<car_id>_<image_id>.jpg`.
 
-## Target classes
-
-| Make | Model | Cars on ECR |
-|------|-------|-------------|
-| lamborghini | aventador | 4,119 |
-| lamborghini | murcielago | 2,974 |
-| lamborghini | diablo | 1,964 |
-| lamborghini | huracan | 1,929 |
-| lamborghini | gallardo | 1,604 |
-| lamborghini | countach | 1,504 |
-| ferrari | 488 | 1,483 |
-| ferrari | sf90 | 1,028 |
-| ferrari | f40 | 974 |
-| ferrari | 458 | 959 |
-
 ## Notes
 
 - ECR serves placeholder images for gated content instead of 403s. The scraper detects and discards these by MD5 hash.
