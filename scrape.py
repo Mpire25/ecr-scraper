@@ -274,9 +274,26 @@ def sanitize_name(name):
             .strip())
 
 
+def resolve_dir(parent, name):
+    """Return a Path for a subdirectory of parent, reusing an existing case-insensitive match.
+
+    If a directory already exists under parent whose name matches case-insensitively, that
+    path is returned (preserving its original casing). Otherwise returns parent/name.lower().
+    """
+    parent = Path(parent)
+    name_lower = name.lower()
+    if parent.exists():
+        for entry in parent.iterdir():
+            if entry.is_dir() and entry.name.lower() == name_lower:
+                return entry
+    return parent / name_lower
+
+
 def scrape_model(client, make, list_slug, model, out_dir, max_images, max_per_car, target_images=None, fill=False, workers=1, random_from_first_n=None, skip_existing_cars=False):
     safe_model = sanitize_name(model)
-    class_dir = Path(out_dir) / f"{make}_{safe_model}"
+    folder_name = f"{make}_{safe_model}".lower()
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    class_dir = resolve_dir(out_dir, folder_name)
     class_dir.mkdir(parents=True, exist_ok=True)
 
     new_images = 0
