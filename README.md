@@ -60,3 +60,11 @@ Output is organised as `<out>/<make>_<model>/<car_id>_<image_id>.jpg`.
 - Some images are gated behind higher account tiers and served as placeholders — these are detected and discarded the same way.
 - Default delay between requests is 0s (network latency alone is sufficient). Use `--delay` if you get rate limited.
 - Use `--workers` to download from multiple individual car listings in parallel. Keeps N listings in-flight simultaneously — useful when scraping models with few images per listing.
+
+## Legal / Intended Use
+
+This project is intended for educational and research purposes only.
+
+Users are solely responsible for ensuring their use complies with all applicable laws, website terms of service, and intellectual property rights. This repository does not grant any rights to third-party content.
+
+If a site prohibits scraping or downloading, do not use this tool on that site without explicit written permission.
